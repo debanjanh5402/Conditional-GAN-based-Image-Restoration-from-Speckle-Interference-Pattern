@@ -4,29 +4,45 @@ import matplotlib.pyplot as plt
 import torch
 from torchmetrics.image import StructuralSimilarityIndexMeasure
 from tqdm import tqdm
+from torchvision import io
 
 
+# Device Selection (MPS for Mac Apple Silicon)
+if torch.backends.mps.is_available():
+    device = torch.device("mps")
+    print("Device : Apple Silicon GPU (MPS)")
+elif torch.cuda.is_available():
+    device = torch.device("cuda")
+    print("Device : NVIDIA GPU (CUDA)")
+else:
+    device = torch.device("cpu")
+    print("Device : CPU")
 
 # Directories
 TRAIN_DIR = Path("./dataset/train")
-RESULTS_DIR = Path("./results")
-PLOTS_DIR = Path("./plots")
+RESULTS_DIR = Path("./_results")
+RESULTS_DIR.mkdir(parents=True, exist_ok=True)
+PLOTS_DIR = Path("./_plots")
+PLOTS_DIR.mkdir(parents=True, exist_ok=True)
 
 sample_dirs = sorted([d for d in TRAIN_DIR.iterdir() if d.is_dir()])
 print(f"Training Samples : {len(sample_dirs)}")
 
-# Gamma configuration
-GAMMAS = torch.linspace(0.0, 1.0, 101)
+if not sample_dirs:
+    raise ValueError(f"No training sample directories found in {TRAIN_DIR.resolve()}")
+
+# Gamma configuration on device
+GAMMAS = torch.linspace(0.01, 1.00, 100, device=device)
+
+# SSIM Metric placed on device
+ssim_metric = StructuralSimilarityIndexMeasure(data_range=1.0).to(device)
 
 
-
-# SSIM Metric
-ssim_metric = StructuralSimilarityIndexMeasure(data_range=1.0)
-
+def __read_img(path: Path) -> torch.Tensor:
+    return io.read_image(str(path), io.ImageReadMode.GRAY)
 
 
-# Normalization
-def transform_speckle(x: torch.Tensor):
+def transform_speckle(x: torch.Tensor) -> torch.Tensor:
     x_min = x.min()
     x_max = x.max()
 
@@ -35,39 +51,46 @@ def transform_speckle(x: torch.Tensor):
 
     return (x - x_min) / (x_max - x_min)
 
-def transform_clean(x: torch.Tensor):
-    return x / 255.0
+
+def transform_clean(x: torch.Tensor) -> torch.Tensor:
+    return x.float() / 255.0
 
 
+# Storage for sample scores per gamma: shape -> [100 gammas, N samples]
+gamma_sample_scores = [[] for _ in range(len(GAMMAS))]
 
-# Gamma Search
-dataset_ssims = []
+# Fast Loop: Load files ONCE per sample, evaluate across all GAMMAS on GPU/MPS
+for sample_dir in tqdm(sample_dirs, desc="Processing Samples", unit="sample"):
+    clean_path = next(sample_dir.glob("*_clean.png"))
+    speckle_path = next(sample_dir.glob("*_speckle.pt"))
 
-for gamma in tqdm(GAMMAS, desc="Searching Gamma", leave=False):
-    sample_scores = []
-    for sample_dir in tqdm(sample_dirs, desc=f"gamma = {gamma:.4f}", leave=False):
-        clean_path = next(sample_dir.glob("*_clean.pt"))
-        speckle_path = next(sample_dir.glob("*_speckle.pt"))
+    # Load clean & speckles ONCE and move to device as float32
+    clean = transform_clean(__read_img(clean_path))
+    if clean.ndim == 2:
+        clean = clean.unsqueeze(0)
+    clean_batch = clean.unsqueeze(0).to(device)  # Shape: (1, 1, H, W)
 
-        clean = torch.load(clean_path)
-        speckles = torch.load(speckle_path)
-        clean = transform_clean(clean)
+    speckles = torch.load(speckle_path)
 
+    # Pre-normalize speckles into [0, 1] ONCE per sample and move to MPS
+    norm_speckles = [transform_speckle(s).float().to(device) for s in speckles]
+
+    # Evaluate all gammas on MPS
+    for g_idx, gamma in enumerate(GAMMAS):
         ssim_metric.reset()
-        for speckle in speckles:
-            speckle = transform_speckle(speckle ** gamma)
-            ssim_metric.update(speckle.unsqueeze(0).unsqueeze(0), clean.unsqueeze(0))
+        for norm_speckle in norm_speckles:
+            speckle_transformed = (norm_speckle ** gamma).view_as(clean_batch)
+            ssim_metric.update(speckle_transformed, clean_batch)
 
-        sample_scores.append(ssim_metric.compute().item())
-    dataset_ssim = sum(sample_scores) / len(sample_scores)
-    dataset_ssims.append(dataset_ssim)
-    print(f"gamma: {gamma:.4f}, ssim: {dataset_ssim:.6f}")
+        gamma_sample_scores[g_idx].append(ssim_metric.compute().item())
 
 
-# Dictionary: {gamma: mean_dataset_ssim}
-result = {float(gamma): float(ssim) for gamma, ssim in zip(GAMMAS, dataset_ssims)}
+# Compute dataset mean SSIM per gamma
+dataset_ssims = [sum(scores) / len(scores) for scores in gamma_sample_scores]
 
-# Save dictionary to text file
+# Save Results
+GAMMAS_cpu = GAMMAS.cpu()
+result = {float(gamma): float(ssim) for gamma, ssim in zip(GAMMAS_cpu, dataset_ssims)}
 result_file = RESULTS_DIR / "gamma_vs_ssim.txt"
 
 with open(result_file, "w") as f:
@@ -76,31 +99,25 @@ with open(result_file, "w") as f:
     for gamma, ssim in result.items():
         f.write(f"{gamma:.4f}\t{ssim:.6f}\n")
 
-
-
 # Best Gamma
-dataset_ssims = torch.tensor(dataset_ssims)
-best_index = torch.argmax(dataset_ssims).item()
-best_gamma = GAMMAS[best_index].item()
-best_ssim = dataset_ssims[best_index].item()
+dataset_ssims_tensor = torch.tensor(dataset_ssims)
+best_index = torch.argmax(dataset_ssims_tensor).item()
+best_gamma = GAMMAS_cpu[best_index].item()
+best_ssim = dataset_ssims_tensor[best_index].item()
 
 print("\n==========================================")
 print(f"Optimal Gamma : {best_gamma:.4f}")
 print(f"Maximum SSIM  : {best_ssim:.6f}")
 print("==========================================\n")
 
-# Append best result to file
 with open(result_file, "a") as f:
     f.write("\n")
     f.write(f"Optimal Gamma : {best_gamma:.4f}\n")
     f.write(f"Maximum SSIM  : {best_ssim:.6f}\n")
 
-
-
 # Plot
 plt.figure(figsize=(8, 5))
-
-plt.plot(GAMMAS.numpy(), dataset_ssims.numpy(), lw=2)
+plt.plot(GAMMAS_cpu.numpy(), dataset_ssims_tensor.numpy(), lw=2)
 plt.scatter(best_gamma, best_ssim, color="red", label=f"γ={best_gamma:.4f}")
 plt.xlabel("Gamma")
 plt.ylabel("Mean Dataset SSIM")

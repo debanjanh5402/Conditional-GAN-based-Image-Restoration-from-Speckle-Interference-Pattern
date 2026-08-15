@@ -26,7 +26,7 @@ NUM_SPECKLES = 3
 CLEAN_SUFFIX = "_clean"
 SPECKLE_SUFFIX = "_speckle"
 TENSOR_EXTENSION = ".pt"
-IMG_EXTENSION = ".jpg" 
+IMG_EXTENSION = ".png" 
 
 
 # Gaussian PSF

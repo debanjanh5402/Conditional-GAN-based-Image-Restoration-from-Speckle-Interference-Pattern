@@ -23,13 +23,11 @@ def gaussian_psf(size: int, sigma: float) -> torch.Tensor:
 
 
 def generate_speckle(clean_image: torch.Tensor, H:torch.Tensor) -> torch.Tensor:
-
-    amplitude = clean_image.float().to(dtype=torch.float32)
+    amplitude = (clean_image/255.0).to(dtype=torch.float32)
     random_phase = (- math.pi + 2 * math.pi * torch.rand_like(amplitude, dtype=torch.float32))
     g = (amplitude * torch.exp(1j * random_phase)).to(dtype=torch.complex64)
     G = _fft2c(g)
 
     propagated = _ifft2c(G * H)
     speckle = torch.abs(propagated) ** 2
-
-    return (speckle.cpu()).to(dtype=torch.float32)
+    return speckle.to(torch.float32).cpu()

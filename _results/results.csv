@@ -1,0 +1,4 @@
+model      , loss      , epochs, bs, steps, lr   , best_epoch, train_loss, val_loss, train_ssim, val_ssim, test_ssim, train_psnr, val_psnr, test_psnr, 
+Pix2PixUNet, L1        ,    100,  4, 50000, 0.001,         94,   0.089923, 0.111161,     0.7285,   0.7194, 0.7249   ,      23.73,    22.35, 23.39    , 
+Pix2PixUNet, MSE       ,    100,  4, 50000, 0.001,        100,   0.016019, 0.022601,     0.7331,   0.7237, 0.7258   ,      23.97,    22.48, 23.32    , 
+Pix2PixUNet, Huber(0.5),    100,  4, 50000, 0.001,         94,   0.008084, 0.011162,     0.7310,   0.7246, Nan      ,      23.92,    22.51, Nan      , 

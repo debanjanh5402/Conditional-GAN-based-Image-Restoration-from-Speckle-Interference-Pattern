@@ -34,15 +34,14 @@ class DatasetGenerator:
         for img_path in tqdm(img_paths, desc=input_dir.name):
             imgname = _get_imgname(img_path)
             sample_dir = _create_sample_dir(output_dir, imgname)
-            clean = _read_img(img_path)
+            clean = _read_img(img_path) # (1, 256, 256) # [0, 255], torch.uint8
             _save_as_image(sample_dir, name=f"{imgname}{CLEAN_SUFFIX}", tensor=clean)
-            _save_as_tensor(sample_dir, name=f"{imgname}{CLEAN_SUFFIX}", tensor=clean)
+            #_save_as_tensor(sample_dir, name=f"{imgname}{CLEAN_SUFFIX}", tensor=clean)
 
-
-            shots = []
+            speckles = []
             for i in range(1, NUM_SPECKLES + 1):
-                speckle = generate_speckle(clean, H)
-                _save_as_image(sample_dir, name=f"{imgname}{i}{SPECKLE_SUFFIX}", tensor=speckle)
-                shots.append(speckle.squeeze())
-            _save_as_tensor(sample_dir, name=f"{imgname}{SPECKLE_SUFFIX}", tensor=torch.stack(shots, dim=0))
+                speckle = generate_speckle(clean, H) # torch.float32
+                speckles.append(speckle)
+
+            _save_as_tensor(sample_dir, name=f"{imgname}{SPECKLE_SUFFIX}", tensor=torch.cat(speckles, dim=0))
             
