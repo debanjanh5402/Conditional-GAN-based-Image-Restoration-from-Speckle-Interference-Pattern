@@ -4,7 +4,7 @@ import torch
 
 from torchvision import io
 
-from .utils import _normalize_img, _normalize_speckle
+from ..utils import _normalize_img, _normalize_speckle
 
 class SpeckleDataset(Dataset):
     def __init__(self, root_dir:str|Path, gamma:float):

@@ -1,152 +1,167 @@
 from pathlib import Path
 
-from itertools import cycle
-
+import torch
 from torch.utils.data import DataLoader
 from torch.nn import Module
 from torch.optim import Optimizer
-from torch import device
+
+from torchmetrics.image import (StructuralSimilarityIndexMeasure,
+                                PeakSignalNoiseRatio)
 
 from tqdm import tqdm
 
-from .train_step import train_discriminator, train_generator
-from .val_step import validate
-from .utils import _save_checkpoint
+
+from .train_step import train_step
+from .val_step import val_step
+from .predict import predict
 from ..losses import Pix2PixLoss
+from ..utils import (_log_epoch_summary_pix2pix, _save_checkpoint_pix2pix, _load_checkpoint_pix2pix)
 
 
+def fit_pix2pix(
+        *,
+        train_loader: DataLoader,
+        generator: Module,
+        discriminator: Module,
+        optimizer_g: Optimizer,
+        optimizer_d: Optimizer,
+        loss_fn: Pix2PixLoss,
+        epochs: int,
+        device: torch.device|str,
+        checkpoint_dir: str|Path|None = None,
+        fname_identifier: str|None = None,
+        val_loader: DataLoader|None = None,
+        test_loader: DataLoader|None = None,
+        resume:bool|None = None
+        ):
 
-def fit_pix2pix(train_loader: DataLoader,
-                *,
-                generator: Module, discriminator: Module,
-                optimizer_g: Optimizer, optimizer_d: Optimizer,
-                loss_fn: Pix2PixLoss, 
-                steps: int,
-                device: str|device,
-                gd_update_ratio: int = 1,
-                val_loader: DataLoader|None = None,
-                validate_every: int|None = None,
-                latest_checkpoint_dir: str|Path|None = None,
-                checkpoint_every: int|None = None,
-                best_model_dir: str|Path|None = None,
-                fname_identifier: str =""):
+    do_validation = False
+    do_save_latest_checkpoint = False
 
-    # validate update ratio
-    if gd_update_ratio < 1: 
-        raise ValueError(f"generator_discriminator_update_ratio must be >= 1")
+    # Checkpoint paths
+    if checkpoint_dir is not None:
+        do_save_latest_checkpoint = True
+        checkpoint_dir = Path(checkpoint_dir)
+        checkpoint_dir.mkdir(parents=True, exist_ok=True)
 
-    # training history
-    history = {"train": {"steps": [], 
-                         "g_loss": [], "g_adv_loss": [], "g_recon_loss": [],
-                         "d_loss": [], "d_real_loss": [], "d_fake_loss": []},
-                "val": {"steps": [],
-                        "ssim": [], "psnr": [], "mse": []}}
+        latest_checkpoint_path = checkpoint_dir / "latest_checkpoint.pt"
+        best_checkpoint_path = checkpoint_dir / "best_checkpoint.pt"
 
-    # validation setup
-    do_validate = False
+        if fname_identifier is not None:
+            latest_checkpoint_path = checkpoint_dir / f"latest_checkpoint_{str(fname_identifier)}.pt"
+            best_checkpoint_path = checkpoint_dir / f"best_checkpoint_{str(fname_identifier)}.pt"
+
     if val_loader is not None:
-        if validate_every is None:
-            validate_every = len(train_loader)
-        do_validate = True
+        do_validation = True
 
 
-    # latest checkpoint setup
-    do_save = False
-    if latest_checkpoint_dir is not None:
-        if checkpoint_every is None:
-            checkpoint_every = len(train_loader)
-        do_save = True
+    # Initialize training state
+    history = {"train": {"g_loss": [], "g_adv_loss": [], "g_recon_loss": [],
+                         "d_loss": [], "d_real_loss": [], "d_fake_loss": [],
+                         "ssim": [], "psnr": []},
+               "val": {"g_loss": [], "g_adv_loss": [], "g_recon_loss": [],
+                       "d_loss": [], "d_real_loss": [], "d_fake_loss": [],
+                       "ssim": [], "psnr": []},
+               "best": None}
 
-    
-    # best checkpoint setup
-    do_save_best = False
-    best_ssim = -1.0
-    if best_model_dir is not None:
-        if val_loader is None:
-            raise ValueError("best_model_dir requires val_loader to be provided.")
-        do_save_best = True
+    best_val_ssim = -1.0
+    start_epoch = 1
 
-
-    # Training setup
-    running_step = 1
-
-    generator.to(device).train()
-    discriminator.to(device).train()
-
-    pbar = tqdm(total=steps, desc="Training", unit="step")
-
-    train_loader = cycle(train_loader)
+    ssim_monitor = StructuralSimilarityIndexMeasure(data_range=1.0).to(device)
+    psnr_monitor = PeakSignalNoiseRatio(data_range=1.0).to(device)
 
 
-    # Training Loop
-    while running_step <= steps:
-        # Get batch
-        batch = next(iter(train_loader))
-        x, y = batch['input'].to(device), batch['target'].to(device)
+    # Resume from last checkpoint
+    if resume:
+        tqdm.write(f"Resuming training from checkpoint: {latest_checkpoint_path}")
+        last_epoch, history = _load_checkpoint_pix2pix(latest_checkpoint_path, device, 
+                                                       generator, discriminator, 
+                                                       optimizer_g, optimizer_d)
+        start_epoch = last_epoch + 1
+        if history['best'] is not None:
+            best_val_ssim = history['best']['val_ssim']
 
-        # Discriminator update
-        d_losses = train_discriminator(x, y, generator, discriminator, optimizer_d, loss_fn)
+        tqdm.write(f"Resuming from epoch {start_epoch}. Previous best SSIM: {best_val_ssim:0.6f}")
 
-        # Number of generator updates
-        for _ in range(gd_update_ratio):
-            g_losses = train_generator(x, y, generator, discriminator, optimizer_g, loss_fn)
+    generator.to(device)
+    discriminator.to(device)
+    generator.train()
+    discriminator.train()
 
-        # Record training history
-        history['train']['steps'].append(running_step)
-        history['train']['g_loss'].append(g_losses['g_loss'])
-        history['train']['g_adv_loss'].append(g_losses['g_adv_loss'])
-        history['train']['g_recon_loss'].append(g_losses['g_recon_loss'])
-        history['train']['d_loss'].append(d_losses['d_loss'])
-        history['train']['d_real_loss'].append(d_losses['d_real_loss'])
-        history['train']['d_fake_loss'].append(d_losses['d_fake_loss'])
+    for epoch in tqdm(range(start_epoch, epochs+1), desc="Epochs", unit="epoch"):
+        is_best = False
 
-        # Progress bar
-        pbar.set_postfix(g=f"{g_losses['g_loss']:.4f}", d=f"{d_losses['d_loss']:.4f}")
+        # Training
+        train_history = train_step(train_loader, 
+                                   generator, discriminator,
+                                   optimizer_g, optimizer_d,
+                                   loss_fn, device, 
+                                   ssim_monitor, psnr_monitor)
+        history['train']['g_loss'].append(train_history['g_loss'])
+        history['train']['g_adv_loss'].append(train_history['g_adv_loss'])
+        history['train']['g_recon_loss'].append(train_history['g_recon_loss'])
+        history['train']['d_loss'].append(train_history['d_loss'])
+        history['train']['d_real_loss'].append(train_history['d_real_loss'])
+        history['train']['d_fake_loss'].append(train_history['d_fake_loss'])
+        history['train']['ssim'].append(train_history['ssim'])
+        history['train']['psnr'].append(train_history['psnr'])
 
-        # Validation
-        if do_validate and running_step % validate_every == 0:
-            val_metrics = validate(val_loader, generator, device)
-            history['val']['steps'].append(running_step)
-            history['val']['ssim'].append(val_metrics['ssim'])
-            history['val']['psnr'].append(val_metrics['psnr'])
-            history['val']['mse'].append(val_metrics['mse'])
 
-            if do_save_best:
-                current_ssim = val_metrics['ssim']
-                if current_ssim > best_ssim:
-                    best_ssim = current_ssim
-                    best_model_path = Path(best_model_dir) / f"best_checkpoint_{fname_identifier}.pt"
-                    #best_model_path = Path(best_model_dir) / f"best_checkpoint.pt"
-                    _save_checkpoint(best_model_path, history=history, 
-                                    generator=generator, discriminator=discriminator, 
-                                    g_optimizer=optimizer_g, d_optimizer=optimizer_d)
-                    tqdm.write(f"\nNew best model at step {running_step} | SSIM: {best_ssim:.6f}")
+        if do_validation:
+            val_history = val_step(val_loader, 
+                                   generator, discriminator,
+                                   loss_fn, device,
+                                   ssim_monitor, psnr_monitor)
+
+            history['val']['g_loss'].append(val_history['g_loss'])
+            history['val']['g_adv_loss'].append(val_history['g_adv_loss'])
+            history['val']['g_recon_loss'].append(val_history['g_recon_loss'])
+            history['val']['d_loss'].append(val_history['d_loss'])
+            history['val']['d_real_loss'].append(val_history['d_real_loss'])
+            history['val']['d_fake_loss'].append(val_history['d_fake_loss'])
+            history['val']['ssim'].append(val_history['ssim'])
+            history['val']['psnr'].append(val_history['psnr'])
+
+            _log_epoch_summary_pix2pix(epoch, train_history, val_history)
+
+            is_best = True if val_history['ssim'] > best_val_ssim else False
+            if is_best:
+                best_val_ssim = val_history['ssim']
+                history['best'] = {"epoch": epoch,
+                                   "train_g_loss": train_history['g_loss'], 
+                                   "train_g_adv_loss": train_history['g_adv_loss'], 
+                                   "train_g_recon_loss": train_history['g_recon_loss'],
+                                   "train_d_loss": train_history['d_loss'],
+                                   "train_d_real_loss": train_history['d_real_loss'],
+                                   "train_d_fake_loss": train_history['d_fake_loss'],
+                                   "train_ssim": train_history['ssim'],
+                                   "train_psnr": train_history['psnr'],
+                                   "val_g_loss": val_history['g_loss'], 
+                                   "val_g_adv_loss": val_history['g_adv_loss'], 
+                                   "val_g_recon_loss": val_history['g_recon_loss'],
+                                   "val_d_loss": val_history['d_loss'],
+                                   "val_d_real_loss": val_history['d_real_loss'],
+                                   "val_d_fake_loss": val_history['d_fake_loss'],
+                                   "val_ssim": val_history['ssim'],
+                                   "val_psnr": val_history['psnr']}
+                _save_checkpoint_pix2pix(best_checkpoint_path, epoch, history, 
+                                 generator, discriminator,
+                                 optimizer_g, optimizer_d, 
+                                 log_str=f"Best checkpoint from epoch {epoch} saved at {best_checkpoint_path}")
+
+        else:
+            _log_epoch_summary_pix2pix(epoch, train_history)
+            is_best = True
 
         # Latest checkpoint
-        if do_save and running_step % checkpoint_every == 0:
-            latest_checkpoint_path = Path(latest_checkpoint_dir) / f"latest_checkpoint_{fname_identifier}.pt"
-            #latest_checkpoint_path = Path(latest_checkpoint_dir) / f"latest_checkpoint.pt"
-            _save_checkpoint(latest_checkpoint_path, history=history, 
-                             generator=generator, discriminator=discriminator,
-                             g_optimizer=optimizer_g, d_optimizer=optimizer_d)
+        if do_save_latest_checkpoint:
+            _save_checkpoint_pix2pix(latest_checkpoint_path, epoch, history,
+                                     generator, discriminator, optimizer_g, optimizer_d)
 
-            
+        # Prediction on Test Set
+        if test_loader is not None and is_best:
+            predict(test_loader, generator, device, ssim_monitor, psnr_monitor, fname_identifier)
 
-        running_step += 1
-        pbar.update(1)
+        tqdm.write("\n")
 
-    pbar.close()
-
-    return history 
-
-            
-
-
-        
-
-
-
-
-
-
-    
+    return history
