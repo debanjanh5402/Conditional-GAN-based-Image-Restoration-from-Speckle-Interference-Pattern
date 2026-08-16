@@ -1,0 +1,70 @@
+import torch
+from torch.utils.data import DataLoader
+from torch.nn import Module
+
+from tqdm import tqdm
+
+from ..losses import Pix2PixLoss
+from ..utils import _from11_to01
+
+def val_step(
+        dataloader: DataLoader,
+        generator: Module,
+        discriminator: Module,
+        loss_fn: Pix2PixLoss,
+        device: torch.device,
+        ssim_metric,
+        psnr_metric
+        ) -> dict:
+
+    was_g_training = generator.training
+    was_d_training = discriminator.training
+    generator.eval()
+    discriminator.eval()
+
+    num_samples = 0
+    total_g_loss, total_g_adv_loss, total_g_recon_loss = 0.0, 0.0, 0.0
+    total_d_loss, total_d_real_loss, total_d_fake_loss = 0.0, 0.0, 0.0
+
+    ssim_metric.reset()
+    psnr_metric.reset()
+
+    with torch.no_grad():
+        for batch in tqdm(dataloader, desc="Validation", leave=False, unit="batches"):
+            x, y = batch['input'].to(device), batch['target'].to(device)
+            batch_size = x.shape[0]
+
+            y_pred = generator(x)
+            d_out_real = discriminator(x, y)
+            d_out_fake = discriminator(x, y_pred)
+
+            g_loss, g_adv_loss, g_recon_loss = loss_fn.generator_loss(d_out_fake, y_pred, y)
+            d_loss, d_real_loss, d_fake_loss = loss_fn.discriminator_loss(d_out_real, d_out_fake)
+
+            ssim_metric.update(_from11_to01(y_pred), _from11_to01(y))
+            psnr_metric.update(_from11_to01(y_pred), _from11_to01(y))
+
+            num_samples += batch_size
+            total_g_loss += g_loss.item() * batch_size
+            total_g_adv_loss += g_adv_loss.item() * batch_size
+            total_g_recon_loss += g_recon_loss.item() * batch_size
+            total_d_loss += d_loss.item() * batch_size
+            total_d_real_loss += d_real_loss.item() * batch_size
+            total_d_fake_loss += d_fake_loss.item() * batch_size
+
+
+    if was_g_training: generator.train()
+    if was_d_training: discriminator.train()
+
+    return {
+        "g_loss": total_g_loss/num_samples,
+        "g_adv_loss": total_g_adv_loss/num_samples,
+        "g_recon_loss": total_g_recon_loss/num_samples,
+
+        "d_loss": total_d_loss/num_samples,
+        "d_real_loss": total_d_real_loss/num_samples,
+        "d_fake_loss": total_d_fake_loss/num_samples,
+
+        "ssim": ssim_metric.compute().item(),
+        "psnr": psnr_metric.compute().item()
+    }

@@ -5,7 +5,7 @@ from torch.nn import Module
 from tqdm import tqdm
 
 from ..losses import Pix2PixLoss
-from ..utils.pix2pix_train_utils import from11_to01
+from ..utils import _from11_to01
 
 def val_step(
         dataloader: DataLoader,
@@ -40,8 +40,8 @@ def val_step(
             g_loss, g_adv_loss, g_recon_loss = loss_fn.generator_loss(d_out_fake, y_pred, y)
             d_loss, d_real_loss, d_fake_loss = loss_fn.discriminator_loss(d_out_real, d_out_fake)
 
-            y_norm = from11_to01(y)
-            y_pred_norm = from11_to01(y_pred)
+            y_norm = _from11_to01(y)
+            y_pred_norm = _from11_to01(y_pred)
             ssim_metric.update(y_pred_norm, y_norm)
             psnr_metric.update(y_pred_norm, y_norm)
 

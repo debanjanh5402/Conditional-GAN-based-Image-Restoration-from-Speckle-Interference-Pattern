@@ -103,3 +103,48 @@ def _load_checkpoint_pix2pix(
             d_optimizer.load_state_dict(checkpoint["optimizer_d"])
 
     return checkpoint["epoch"], checkpoint["history"]
+
+
+def _save_checkpoint_pix2pix_step(
+          filepath: str|Path,
+          step: int,
+          history: dict,
+          generator: Module|None = None,
+          discriminator: Module|None = None,
+          g_optimizer: Optimizer|None = None,
+          d_optimizer: Optimizer|None = None,
+          log_str: str|None= None
+          ): 
+
+     filepath = Path(filepath)
+     filepath.parent.mkdir(parents=True, exist_ok=True)
+
+     checkpoint = {'step': step, 'history': history}
+
+     if generator is not None: checkpoint["generator"] = generator.state_dict()
+     if discriminator is not None: checkpoint["discriminator"] = discriminator.state_dict()
+     if g_optimizer is not None: checkpoint["optimizer_g"] = g_optimizer.state_dict()
+     if d_optimizer is not None: checkpoint["optimizer_d"] = d_optimizer.state_dict()
+
+     torch.save(checkpoint, filepath)
+
+     if log_str is not None:
+          tqdm.write(str(log_str))
+
+
+def _load_checkpoint_pix2pix_step(
+          filepath: str | Path, 
+          device: torch.device,
+          generator=None, 
+          discriminator=None, 
+          g_optimizer=None, 
+          d_optimizer=None):
+    
+    checkpoint = torch.load(Path(filepath), map_location=device)
+
+    if generator is not None: generator.load_state_dict(checkpoint["generator"])
+    if discriminator is not None: discriminator.load_state_dict(checkpoint["discriminator"])
+    if g_optimizer is not None: g_optimizer.load_state_dict(checkpoint["optimizer_g"])
+    if d_optimizer is not None: d_optimizer.load_state_dict(checkpoint["optimizer_d"])
+
+    return checkpoint["step"], checkpoint["history"]

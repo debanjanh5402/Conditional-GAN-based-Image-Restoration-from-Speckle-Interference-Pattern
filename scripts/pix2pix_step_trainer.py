@@ -7,12 +7,13 @@ sys.path.insert(0, str(PROJECT_ROOT))
 # ----------------------------------------------------------------------------------------------------
 from pathlib import Path
 
+from torch.nn import L1Loss, MSELoss, HuberLoss
 from torch.utils.data import DataLoader
 from torch.optim import Adam
 
 from specklerestore.config import *
 from specklerestore.data import SpeckleDataset
-from specklerestore.pix2pix_engine_epoch import fit_pix2pix_epoch
+from specklerestore.pix2pix_engine_step import fit_pix2pix_step
 from specklerestore.models import Pix2PixUNet, Discriminator
 from specklerestore.losses import Pix2PixLoss
 
@@ -36,18 +37,19 @@ def main():
     opt_D = Adam(params=D.parameters(), lr = DISCRIMINATOR_LEARNING_RATE, betas=DISCRIMINATOR_BETAS)
 
     history = fit_pix2pix(
-        train_loader=train_loader, 
-        generator=G, 
-        discriminator=D, 
-        optimizer_g=opt_G, 
-        optimizer_d=opt_D,
-        loss_fn=Pix2PixLoss(),
-        epochs=10,
+        train_loader=train_loader,
+        generator=G, discriminator=D,
+        optimizer_g=opt_G, optimizer_d=opt_D, 
+        loss_fn=Pix2PixLoss(recon_loss=L1Loss(), lambda_recon=100.0),
+        total_steps=2500,
+        val_interval=100,
         device=DEVICE,
-        checkpoint_dir= Path("./_checkpoints"),
-        fname_identifier= f"pix2pix_lr({GENERATOR_LEARNING_RATE:0.4f}, {DISCRIMINATOR_LEARNING_RATE:0.4f})_batch{BATCH_SIZE}_l1100_test",
+        g_updates_per_step=1,
+        d_updates_per_step=1,
+        checkpoint_dir=Path("./_checkpoints"),
+        fname_identifier="pix2pix_default_test",
         val_loader=val_loader,
-        test_loader=test_loader,
+        test_loader=test_loader, 
         resume=False)
 
 

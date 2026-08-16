@@ -18,7 +18,7 @@ from ..losses import Pix2PixLoss
 from ..utils import (_log_epoch_summary_pix2pix, _save_checkpoint_pix2pix, _load_checkpoint_pix2pix)
 
 
-def fit_pix2pix(
+def fit_pix2pix_epoch(
         *,
         train_loader: DataLoader,
         generator: Module,

@@ -6,7 +6,7 @@ from torch.nn import Module
 
 from tqdm import tqdm
 
-from ..utils.pix2pix_train_utils import from11_to01
+from ..utils import _from11_to01
 from ..config import TEST_DIR
 
 
@@ -30,8 +30,8 @@ def predict(
         with torch.no_grad():
             y_pred = generator(x)
 
-            y_norm = from11_to01(y)
-            y_pred_norm = from11_to01(y_pred)
+            y_norm = _from11_to01(y)
+            y_pred_norm = _from11_to01(y_pred)
             ssim = ssim_metric(y_pred_norm, y_norm).item()
             psnr = psnr_metric(y_pred_norm, y_norm).item()
 

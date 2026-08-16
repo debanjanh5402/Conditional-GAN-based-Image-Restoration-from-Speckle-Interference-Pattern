@@ -5,7 +5,7 @@ from torch.utils.data import DataLoader
 from tqdm import tqdm
 
 from ..losses import Pix2PixLoss
-from ..utils.pix2pix_train_utils import from11_to01
+from ..utils import _from11_to01
 
 def train_step(
         dataloader: DataLoader,
@@ -52,8 +52,8 @@ def train_step(
         for p in discriminator.parameters():
             p.requires_grad = True
 
-        y_norm = from11_to01(y)
-        y_pred_norm = from11_to01(y_pred)
+        y_norm = _from11_to01(y)
+        y_pred_norm = _from11_to01(y_pred)
         ssim_metric.update(y_pred_norm, y_norm)
         psnr_metric.update(y_pred_norm, y_norm)
 
