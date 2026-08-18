@@ -7,7 +7,7 @@ class DownBlock(nn.Module):
         super().__init__()
 
         layers = [nn.Conv2d(in_channels, out_channels, kernel_size=4, stride=2, padding=1, bias=False)] 
-        if norm: layers.append(nn.BatchNorm2d(num_features=out_channels, bias=False))
+        if norm: layers.append(nn.InstanceNorm2d(num_features=out_channels, bias=False))
         layers.append(nn.LeakyReLU(0.2, inplace=True))
         self.block = nn.Sequential(*layers)
 
@@ -21,7 +21,7 @@ class UpBlock(nn.Module):
         super().__init__()
 
         layers = [nn.ConvTranspose2d(in_channels, out_channels, kernel_size=4, stride=2, padding=1, bias=False),
-                  nn.BatchNorm2d(out_channels, bias=False),
+                  nn.InstanceNorm2d(out_channels, bias=False),
                   nn.ReLU(inplace=True)]
         if drop: layers.append(nn.Dropout(0.5))
         self.block = nn.Sequential(*layers)
@@ -36,7 +36,7 @@ class BottleNeck(nn.Module):
         super().__init__()
 
         layers = [nn.Conv2d(in_channels, out_channels, kernel_size=4, stride=2, padding=1, bias=False)] 
-        if norm: layers.append(nn.BatchNorm2d(num_features=out_channels, bias=False))
+        if norm: layers.append(nn.InstanceNorm2d(num_features=out_channels, bias=False))
         layers.append(nn.LeakyReLU(0.2, inplace=True))
         self.block = nn.Sequential(*layers)
 
@@ -63,7 +63,7 @@ class DiscBlock(nn.Module):
         super().__init__()
 
         layers = [nn.Conv2d(in_channels, out_channels, kernel_size=4, stride=stride, padding=1, bias=False)]
-        if norm: layers.append(nn.BatchNorm2d(out_channels))
+        if norm: layers.append(nn.InstanceNorm2d(out_channels))
         layers.append(nn.LeakyReLU(negative_slope=0.2, inplace=True))
 
         self.block = nn.Sequential(*layers)

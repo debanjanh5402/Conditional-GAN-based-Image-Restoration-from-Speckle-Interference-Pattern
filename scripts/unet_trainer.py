@@ -9,15 +9,13 @@ from pathlib import Path
 
 from torch.utils.data import DataLoader
 from torch.optim import Adam
-from torch.nn import L1Loss, MSELoss, HuberLoss
+from torch.nn import L1Loss
+from torch.optim.lr_scheduler import ReduceLROnPlateau
 
 from specklerestore.data import SpeckleDataset
 from specklerestore.models import Pix2PixUNet
 from specklerestore.unet_engine import fit_unet
-from specklerestore.config import (TRAIN_DIR, VAL_DIR, TEST_DIR, 
-                                   DEVICE, NUM_WORKERS, 
-                                   BATCH_SIZE, IN_CHANNELS, OUT_CHANNELS,
-                                   GAMMA, UNET_LEARNING_RATE, UNET_BETAS)
+from specklerestore.config import *
 
 
 def main():
@@ -34,18 +32,20 @@ def main():
     unet_model = Pix2PixUNet(in_channels=IN_CHANNELS, out_channels=OUT_CHANNELS).to(DEVICE)
 
     opt = Adam(params=unet_model.parameters(), lr=UNET_LEARNING_RATE, betas=UNET_BETAS)
+    scheduler = ReduceLROnPlateau(opt, mode="min", factor=0.5, patience=8, min_lr=1e-6)
 
     history = fit_unet(train_loader=train_loader, 
                        model=unet_model, 
                        optimizer=opt, 
-                       loss_fn=HuberLoss(delta=0.5), 
-                       epochs=5, 
+                       loss_fn=L1Loss(), 
+                       epochs=EPOCHS, 
                        device=DEVICE,
-                       checkpoint_dir=Path("./_checkpoints"),
+                       checkpoint_dir=CHECKPOINT_DIR,
                        val_loader=val_loader,
-                       fname_identifier=f"unet_lr{UNET_LEARNING_RATE:0.3f}_batch{BATCH_SIZE:1d}_huber0.5_test",
+                       fname_identifier=PRETRAINING_FNAME_IDENTIFIER,
                        test_loader=test_loader,
-                       resume=False)
+                       resume=False,
+                       scheduler=scheduler)
 
 
 if __name__ == "__main__":

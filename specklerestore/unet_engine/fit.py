@@ -29,7 +29,8 @@ def fit_unet(
         fname_identifier: str|None = None,
         val_loader:DataLoader|None = None,
         test_loader: DataLoader|None = None,
-        resume:bool|None = None):
+        resume:bool|None = None,
+        scheduler = None):
 
     # Checkpoint paths
     if checkpoint_dir is not None:
@@ -63,7 +64,7 @@ def fit_unet(
     if resume:
         tqdm.write(f"Resuming training from checkpoint: {latest_checkpoint_path}")
         last_epoch, history = _load_checkpoint_unet(latest_checkpoint_path, device, 
-                                                    model, optimizer)
+                                                    model, optimizer, scheduler)
         start_epoch = last_epoch + 1
         if history['best'] is not None:
             best_val_ssim = history['best']['val_ssim']
@@ -92,6 +93,8 @@ def fit_unet(
             val_history = val_step(val_loader, 
                                    model, loss_fn, device, 
                                    ssim_monitor, psnr_monitor)
+            if scheduler is not None:
+                scheduler.step(val_history['loss'])
             
             history['val']['loss'].append(val_history['loss'])
             history['val']['ssim'].append(val_history['ssim'])
@@ -110,7 +113,7 @@ def fit_unet(
                                    'val_loss': val_history['loss'], 
                                    'val_ssim': val_history['ssim'], 
                                    'val_psnr': val_history['psnr']}
-                _save_checkpoint_unet(best_checkpoint_path, epoch, history, model, optimizer, 
+                _save_checkpoint_unet(best_checkpoint_path, epoch, history, model, optimizer, scheduler,
                                  log_str=f"Best checkpoint from epoch {epoch} saved at {best_checkpoint_path}")
 
         else:
@@ -118,7 +121,7 @@ def fit_unet(
 
         # Latest checkpoint
         if do_save_latest_checkpoint:
-            _save_checkpoint_unet(latest_checkpoint_path, epoch, history, model, optimizer)
+            _save_checkpoint_unet(latest_checkpoint_path, epoch, history, model, optimizer, scheduler)
 
         # Test Prediction
         if test_loader is not None and is_best:

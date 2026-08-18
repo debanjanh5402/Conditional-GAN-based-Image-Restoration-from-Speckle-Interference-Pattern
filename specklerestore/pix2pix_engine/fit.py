@@ -14,13 +14,13 @@ from .train_step import train_step
 from .val_step import val_step
 from .predict import predict
 from ..losses import Pix2PixLoss
-from ..utils import (_save_checkpoint_pix2pix_step, _load_checkpoint_pix2pix_step,
+from ..utils import (_save_checkpoint_pix2pix, _load_checkpoint_pix2pix,
                      _log_step_summary_pix2pix)
 from ..config import TEST_DIR
 
 
 
-def fit_pix2pix_step(
+def fit_pix2pix(
         train_loader: DataLoader,
         generator: Module,
         discriminator: Module,
@@ -36,7 +36,9 @@ def fit_pix2pix_step(
         fname_identifier: str|None = None,
         val_loader: DataLoader|None = None,
         test_loader: DataLoader|None = None,
-        resume:bool = False
+        resume:bool = False,
+        scheduler_g = None,
+        scheduler_d = None,
         ) -> dict:
 
     do_validation = False
@@ -55,9 +57,11 @@ def fit_pix2pix_step(
     if val_loader is not None: do_validation = True
 
     history = {
-        "train": {"g_loss": [], "g_adv_loss": [], "g_recon_loss": [],
+        "train": {"steps": [],
+                  "g_loss": [], "g_adv_loss": [], "g_recon_loss": [],
                   "d_loss": [], "d_real_loss": [], "d_fake_loss": []}, 
-        "val": {"g_loss": [], "g_adv_loss": [], "g_recon_loss": [],
+        "val": {"steps": [],
+                "g_loss": [], "g_adv_loss": [], "g_recon_loss": [],
                 "d_loss": [], "d_real_loss": [], "d_fake_loss": [],
                 "ssim": [], "psnr": []}, 
         "best": None}
@@ -69,11 +73,12 @@ def fit_pix2pix_step(
     psnr_monitor = PeakSignalNoiseRatio(data_range=1.0).to(device)
 
     if resume and latest_ckpt_path.exists():
-        start_step, history = _load_checkpoint_pix2pix_step(latest_ckpt_path, device, 
+        last_step, history = _load_checkpoint_pix2pix(latest_ckpt_path, device, 
                                                             generator, discriminator, 
-                                                            optimizer_g, optimizer_d)
+                                                            optimizer_g, optimizer_d,
+                                                            scheduler_g, scheduler_d)
         if history.get("best"): best_val_ssim = history['best'].get("val_ssim", -1.0)
-        start_step += 1
+        start_step = last_step + 1
 
     generator.train()
     discriminator.train()
@@ -94,7 +99,12 @@ def fit_pix2pix_step(
 
         train_history = train_step(batch, generator, discriminator, optimizer_g, optimizer_d, 
                                    loss_fn, device, update_d, update_g)
-        
+
+        if scheduler_d is not None: scheduler_d.step()
+        if scheduler_g is not None: scheduler_g.step()
+
+
+        history['train']['steps'].append(step)
         history['train']['g_loss'].append(train_history['g_loss'])
         history['train']['g_adv_loss'].append(train_history['g_adv_loss'])
         history['train']['g_recon_loss'].append(train_history['g_recon_loss'])
@@ -108,6 +118,8 @@ def fit_pix2pix_step(
 
             if do_validation:
                 val_history = val_step(val_loader, generator, discriminator, loss_fn, device, ssim_monitor, psnr_monitor)
+
+                history['val']['steps'].append(step)
                 history['val']['g_loss'].append(val_history['g_loss'])
                 history['val']['g_adv_loss'].append(val_history['g_adv_loss'])
                 history['val']['g_recon_loss'].append(val_history['g_recon_loss'])
@@ -131,16 +143,19 @@ def fit_pix2pix_step(
                                        'val_d_loss': val_history['d_loss'], 'val_d_real_loss': val_history['d_real_loss'], 'val_d_fake_loss': val_history['d_fake_loss'],
                                        'val_ssim': val_history['ssim'], 'val_psnr': val_history['psnr']}
 
-                    if do_save_ckpt: _save_checkpoint_pix2pix_step(best_ckpt_path, step, history, 
+                    if do_save_ckpt: _save_checkpoint_pix2pix(best_ckpt_path, step, history, 
                                                                    generator, discriminator, 
                                                                    optimizer_g, optimizer_d, 
+                                                                   scheduler_g, scheduler_d,
                                                                    log_str=f"Best checkpoint at step {step} saved at {best_ckpt_path}")
 
             else:
                 _log_step_summary_pix2pix(step, train_history)
 
-            if do_save_ckpt: _save_checkpoint_pix2pix_step(latest_ckpt_path, step, history,
-                                                           generator, discriminator, optimizer_g, optimizer_d)
+            if do_save_ckpt: _save_checkpoint_pix2pix(latest_ckpt_path, step, history, 
+                                                      generator, discriminator, 
+                                                      optimizer_g, optimizer_d,
+                                                      scheduler_g, scheduler_d)
 
             if test_loader is not None and is_best:
                 predict(test_loader, generator, device, ssim_monitor, psnr_monitor, TEST_DIR, fname_identifier)
