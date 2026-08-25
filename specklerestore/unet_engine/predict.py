@@ -34,6 +34,8 @@ def predict(test_loader: DataLoader,
             y_pred_norm = _from11_to01(y_pred)
 
             # Metrics
+            ssim_metric.reset()
+            psnr_metric.reset()
             ssim = (ssim_metric(y_pred_norm, y_norm)).item()
             psnr = (psnr_metric(y_pred_norm, y_norm)).item()
 

@@ -18,7 +18,14 @@ def train_step(
 
     x, y = batch['input'].to(device), batch['target'].to(device)
 
-    history = {}
+    history = {
+        "g_loss": 0.0,
+        "g_adv_loss": 0.0,
+        "g_recon_loss": 0.0,
+        "d_loss": 0.0,
+        "d_real_loss": 0.0,
+        "d_fake_loss": 0.0,
+        }
 
     if update_d:
         d_opt.zero_grad()

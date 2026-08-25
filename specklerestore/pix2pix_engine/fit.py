@@ -37,8 +37,7 @@ def fit_pix2pix(
         val_loader: DataLoader|None = None,
         test_loader: DataLoader|None = None,
         resume:bool = False,
-        scheduler_g = None,
-        scheduler_d = None,
+        discriminator_reset_interval: int | None = None,
         ) -> dict:
 
     do_validation = False
@@ -75,8 +74,7 @@ def fit_pix2pix(
     if resume and latest_ckpt_path.exists():
         last_step, history = _load_checkpoint_pix2pix(latest_ckpt_path, device, 
                                                             generator, discriminator, 
-                                                            optimizer_g, optimizer_d,
-                                                            scheduler_g, scheduler_d)
+                                                            optimizer_g, optimizer_d)
         if history.get("best"): best_val_ssim = history['best'].get("val_ssim", -1.0)
         start_step = last_step + 1
 
@@ -94,14 +92,19 @@ def fit_pix2pix(
             train_iter = iter(train_loader)
             batch = next(train_iter)
 
-        update_g = (step % d_updates_per_step == 0) or (g_updates_per_step > 1) 
-        update_d = (step % g_updates_per_step == 0) or (d_updates_per_step > 1)
+        update_g = (step % g_updates_per_step == 0)
+        update_d = (step % d_updates_per_step == 0)
+
+        if (
+            discriminator_reset_interval is not None
+            and discriminator_reset_interval > 0
+            and step > start_step
+            and step % discriminator_reset_interval == 0
+        ):
+            reset_discriminator(discriminator, optimizer_d)
 
         train_history = train_step(batch, generator, discriminator, optimizer_g, optimizer_d, 
                                    loss_fn, device, update_d, update_g)
-
-        if scheduler_d is not None: scheduler_d.step()
-        if scheduler_g is not None: scheduler_g.step()
 
 
         history['train']['steps'].append(step)
@@ -145,8 +148,7 @@ def fit_pix2pix(
 
                     if do_save_ckpt: _save_checkpoint_pix2pix(best_ckpt_path, step, history, 
                                                                    generator, discriminator, 
-                                                                   optimizer_g, optimizer_d, 
-                                                                   scheduler_g, scheduler_d,
+                                                                   optimizer_g, optimizer_d,
                                                                    log_str=f"Best checkpoint at step {step} saved at {best_ckpt_path}")
 
             else:
@@ -154,10 +156,18 @@ def fit_pix2pix(
 
             if do_save_ckpt: _save_checkpoint_pix2pix(latest_ckpt_path, step, history, 
                                                       generator, discriminator, 
-                                                      optimizer_g, optimizer_d,
-                                                      scheduler_g, scheduler_d)
+                                                      optimizer_g, optimizer_d)
 
             if test_loader is not None and is_best:
                 predict(test_loader, generator, device, ssim_monitor, psnr_monitor, TEST_DIR, fname_identifier)
 
-    return history        
+    return history    
+
+
+
+def reset_discriminator(discriminator: Module, optimizer_d: Optimizer):
+    for module in discriminator.modules():
+        if hasattr(module, "reset_parameters"):
+            module.reset_parameters()
+
+    optimizer_d.state.clear()

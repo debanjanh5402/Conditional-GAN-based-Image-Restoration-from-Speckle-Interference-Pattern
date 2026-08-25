@@ -9,11 +9,11 @@ from pathlib import Path
 
 from torch.utils.data import DataLoader
 from torch.optim import Adam
-from torch.nn import L1Loss
+from torch.nn import L1Loss, MSELoss
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 
 from specklerestore.data import SpeckleDataset
-from specklerestore.models import Pix2PixUNet
+from specklerestore.models import Pix2PixUNet, UNet
 from specklerestore.unet_engine import fit_unet
 from specklerestore.config import *
 
@@ -32,7 +32,6 @@ def main():
     unet_model = Pix2PixUNet(in_channels=IN_CHANNELS, out_channels=OUT_CHANNELS).to(DEVICE)
 
     opt = Adam(params=unet_model.parameters(), lr=UNET_LEARNING_RATE, betas=UNET_BETAS)
-    scheduler = ReduceLROnPlateau(opt, mode="min", factor=0.5, patience=8, min_lr=1e-6)
 
     history = fit_unet(train_loader=train_loader, 
                        model=unet_model, 
@@ -44,8 +43,7 @@ def main():
                        val_loader=val_loader,
                        fname_identifier=PRETRAINING_FNAME_IDENTIFIER,
                        test_loader=test_loader,
-                       resume=False,
-                       scheduler=scheduler)
+                       resume=False)
 
 
 if __name__ == "__main__":

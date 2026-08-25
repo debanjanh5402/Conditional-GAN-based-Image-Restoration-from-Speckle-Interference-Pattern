@@ -33,6 +33,8 @@ def predict(
         with torch.no_grad():
             y_pred = generator(x)
 
+            ssim_metric.reset()
+            psnr_metric.reset()
             ssim_val = ssim_metric(_from11_to01(y_pred), _from11_to01(y)).item()
             psnr_val = psnr_metric(_from11_to01(y_pred), _from11_to01(y)).item()
 

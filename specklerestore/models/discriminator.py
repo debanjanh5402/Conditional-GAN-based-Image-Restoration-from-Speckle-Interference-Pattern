@@ -25,11 +25,11 @@ class Discriminator(nn.Module):
     def __init__(self, in_channels:int, out_channels:int):
         super().__init__()
 
-        blocks = [DiscBlock(in_channels+out_channels, 16, norm=False),
+        blocks = [DiscBlock(in_channels+out_channels, 8, norm=False),
+                  DiscBlock(8, 16),
                   DiscBlock(16, 32),
-                  DiscBlock(32, 64),
-                  DiscBlock(64, 128, stride=1),
-                  nn.Conv2d(128, 1, kernel_size=4, stride=1, padding=1, bias=False)]
+                  DiscBlock(32, 64, stride=1),
+                  nn.Conv2d(64, 1, kernel_size=4, stride=1, padding=1, bias=False)]
         self.model = nn.Sequential(*blocks)
         
 
