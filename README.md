@@ -1,5 +1,17 @@
 # Conditional-GAN-based Image Restoration from Speckle Interference Patterns
 
+<p align="center">
+
+**Debanjan Halder**  
+*Department of Physics, Indian Institute of Technology Delhi*
+Under the supervision of 
+- Prof. Kedar Khare, Optics \& Photonics Centre, IIT Delhi
+- Prof. Bodhaditya Santra, Department of Physics, IIT Delhi
+
+</p>
+
+---
+
 A research-oriented implementation of **Pix2Pix conditional GANs for image restoration from speckle interference patterns**.
 
 This project investigates the reconstruction of clean images from highly distorted optical measurements generated through a speckle-interference process. The final Pix2Pix model is trained **from scratch** and evaluated on a held-out test set.
@@ -160,11 +172,7 @@ $$
 The reconstruction loss combines L1 and SSIM:
 
 $$
-\mathcal{L}_{recon}
-=
-\mathcal{L}_{L1}
-+
-0.364(1-\mathrm{SSIM})
+\mathcal{L}_{recon} = \mathcal{L}_{L1} + 0.364 * (1-\mathrm{SSIM})
 $$
 
 Thus, the generator is optimized for:
@@ -234,14 +242,12 @@ The final Pix2Pix model was trained **from scratch** and evaluated on the held-o
 
 | Metric   | Final Test Result |
 | -------- | ----------------: |
-| **SSIM** |          **~88%** |
-| **PSNR** |        **~22 dB** |
+| **SSIM** |       **~89.66%** |
+| **PSNR** |     **~21.25 dB** |
 
 The final SSIM indicates substantial structural recovery from the highly distorted speckle measurements.
 
 PSNR provides a complementary pixel-level measure of reconstruction fidelity.
-
-> Replace the approximate values above with the exact final values from the completed test evaluation if they differ from the current reported measurements.
 
 ---
 
@@ -249,18 +255,18 @@ PSNR provides a complementary pixel-level measure of reconstruction fidelity.
 
 The training history records the evolution of generator and discriminator optimization as well as image-quality metrics.
 
-### Training Losses
+### Training  and Validation Losses
 
 <p align="center">
-  <img src="plots/training_losses.png" width="900">
+  <img src="_plots/losses.png" width="900">
 </p>
 
 *Generator, adversarial, reconstruction, and discriminator losses during training.*
 
-### Validation Performance
+### Metrics
 
 <p align="center">
-  <img src="plots/validation_metrics.png" width="750">
+  <img src="_plots/metrics.png" width="750">
 </p>
 
 *Validation SSIM and PSNR throughout training.*
@@ -278,7 +284,7 @@ Per-image SSIM and PSNR are recorded to examine not only average performance but
 ### SSIM Distribution
 
 <p align="center">
-  <img src="plots/test_ssim_distribution.png" width="850">
+  <img src="_plots/SSIM.png" width="850">
 </p>
 
 *Distribution of SSIM across the complete test set.*
@@ -286,7 +292,7 @@ Per-image SSIM and PSNR are recorded to examine not only average performance but
 ### PSNR Distribution
 
 <p align="center">
-  <img src="plots/test_psnr_distribution.png" width="850">
+  <img src="_plots/PSNR.png" width="850">
 </p>
 
 *Distribution of PSNR across the complete test set.*
@@ -299,24 +305,22 @@ The distributions help identify difficult samples that are not visible from the 
 
 Representative predictions should be included to demonstrate the actual restoration capability of the trained network.
 
+### Random Samples
+
 <p align="center">
-  <img src="plots/qualitative_results.png" width="1000">
+  <img src="_plots/RANDOM.png" width="900">
 </p>
 
-*Example of three independent speckle measurements, ground truth, and Pix2Pix reconstruction.*
-
-Additional examples can be selected according to test-set SSIM:
-
-### High-Quality Reconstruction
+### Cherry-picked Samples
 
 <p align="center">
-  <img src="plots/best_samples.png" width="900">
+  <img src="_plots/BEST.png" width="900">
 </p>
 
-### Challenging Reconstruction
+### Challenging Samples
 
 <p align="center">
-  <img src="plots/worst_samples.png" width="900">
+  <img src="_plots/WORST.png" width="900">
 </p>
 
 These examples provide qualitative evidence of how successfully the network reconstructs image structure and where the inverse problem remains difficult.
@@ -421,66 +425,6 @@ Reconstruction weight  : 50
 D reset condition      : D_loss < 0.45
                          for 3 consecutive steps
 
-Test SSIM              : ~88%
-Test PSNR              : ~22 dB
+Test SSIM              : 89.66%
+Test PSNR              : 21.25 dB
 ```
-
----
-
-## 14. Completed Work
-
-The following components have been implemented and evaluated:
-
-* Speckle-pattern generation using a Fourier-domain optical model.
-* Generation of multiple independent speckle realizations.
-* Dataset preparation and train/validation/test splitting.
-* Conditional Pix2Pix architecture.
-* U-Net-based image-restoration generator.
-* Conditional PatchGAN discriminator.
-* Combined L1 + SSIM reconstruction objective.
-* Adversarial BCE loss.
-* Asymmetric generator/discriminator optimization.
-* Adaptive discriminator-reset mechanism.
-* Training checkpointing and resume capability.
-* Validation using SSIM and PSNR.
-* Per-image test-set evaluation.
-* Quantitative SSIM and PSNR distribution analysis.
-* Qualitative reconstruction analysis.
-
----
-
-## 15. Future Work
-
-The current implementation establishes a working adversarial restoration framework. Further improvements could investigate:
-
-* physics-informed generator architectures,
-* Fourier-domain or frequency-aware conditioning,
-* explicit optical forward-model constraints,
-* perceptual or multi-scale reconstruction losses,
-* alternative GAN objectives,
-* improved discriminator regularization,
-* adaptive discriminator update frequencies,
-* uncertainty estimation for ambiguous reconstructions,
-* and evaluation under a wider range of optical and speckle conditions.
-
-These extensions would investigate whether the current ~88% SSIM performance can be improved while maintaining stable adversarial training.
-
----
-
-## 16. Status
-
-**Completed research implementation and final model evaluation.**
-
-The project demonstrates the feasibility of recovering clean image structure from speckle interference measurements using a conditional GAN trained directly from scratch.
-
-**Final reported performance:**
-
-$$
-\boxed{\mathrm{SSIM} 89.66\%}
-$$
-
-$$
-\boxed{\mathrm{PSNR} 21.25\mathrm{dB}}
-$$
-
-The primary contribution of the implementation is not only the Pix2Pix restoration model itself, but the investigation of **GAN optimization under a strongly asymmetric inverse-imaging problem**, together with an adaptive mechanism for preventing the discriminator from becoming excessively dominant.
