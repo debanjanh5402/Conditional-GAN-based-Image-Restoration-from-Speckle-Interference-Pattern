@@ -1,14 +1,15 @@
 # Conditional-GAN-based Image Restoration from Speckle Interference Patterns
 
-<p align="center">
+<div align="center">
 
 **Debanjan Halder**  
-*Department of Physics, Indian Institute of Technology Delhi*
-Under the supervision of 
-- Prof. Kedar Khare, Optics \& Photonics Centre, IIT Delhi
-- Prof. Bodhaditya Santra, Department of Physics, IIT Delhi
+*Department of Physics, Indian Institute of Technology Delhi*  
+Under the supervision of  
+Prof. Kedar Khare, Optics & Photonics Centre, IIT Delhi  
+Prof. Bodhaditya Santra, Department of Physics, IIT Delhi  
 
-</p>
+</div>
+
 
 ---
 
@@ -19,6 +20,10 @@ This project investigates the reconstruction of clean images from highly distort
 > **Final Test SSIM:** 89.66%
 > **Final Test PSNR:** 21.25 dB
 > **Framework:** Pix2Pix / Conditional GAN
+
+<p align="center">
+  <img src="_plots/BEST.png" width="900">
+</p>
 
 ---
 
