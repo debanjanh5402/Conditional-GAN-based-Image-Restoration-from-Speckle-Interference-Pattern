@@ -35,8 +35,8 @@ def val_step(
             batch_size = x.shape[0]
 
             y_pred = generator(x)
-            d_out_real = discriminator(x, y)
-            d_out_fake = discriminator(x, y_pred)
+            d_out_real = discriminator(x, torch.cat([y, y, y], dim=1))
+            d_out_fake = discriminator(x, torch.cat([y_pred, y_pred, y_pred], dim=1))
 
             g_loss, g_adv_loss, g_recon_loss = loss_fn.generator_loss(d_out_fake, y_pred, y)
             d_loss, d_real_loss, d_fake_loss = loss_fn.discriminator_loss(d_out_real, d_out_fake)

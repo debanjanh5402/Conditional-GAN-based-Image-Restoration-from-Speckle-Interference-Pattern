@@ -18,21 +18,22 @@ def train_step(
 
     x, y = batch['input'].to(device), batch['target'].to(device)
 
+    # train_step.py 
     history = {
-        "g_loss": 0.0,
-        "g_adv_loss": 0.0,
-        "g_recon_loss": 0.0,
-        "d_loss": 0.0,
-        "d_real_loss": 0.0,
-        "d_fake_loss": 0.0,
-        }
+        "g_loss": float("nan"),
+        "g_adv_loss": float("nan"),
+        "g_recon_loss": float("nan"),
+        "d_loss": float("nan"),
+        "d_real_loss": float("nan"),
+        "d_fake_loss": float("nan"),
+    }
 
     if update_d:
         d_opt.zero_grad()
         with torch.no_grad():
             y_pred_d = generator(x)
-        d_out_real = discriminator(x, y)
-        d_out_fake = discriminator(x, y_pred_d)
+        d_out_real = discriminator(x, torch.cat([y, y, y], dim=1))
+        d_out_fake = discriminator(x, torch.cat([y_pred_d, y_pred_d, y_pred_d], dim=1))
         d_loss, d_real_loss, d_fake_loss = loss_fn.discriminator_loss(d_out_real, d_out_fake)
         d_loss.backward()
         d_opt.step()
@@ -50,7 +51,7 @@ def train_step(
             p.requires_grad = False
 
         y_pred_g = generator(x)
-        d_out_fake_g = discriminator(x, y_pred_g)
+        d_out_fake_g = discriminator(x, torch.cat([y_pred_g, y_pred_g, y_pred_g], dim=1))
         g_loss, g_adv_loss, g_recon_loss = loss_fn.generator_loss(d_out_fake_g, y_pred_g, y)
         g_loss.backward()
         g_opt.step()

@@ -5,7 +5,7 @@ from torch.utils.data import DataLoader
 from torch.optim import Optimizer
 from torch.nn import Module
 
-from torchmetrics.image import (StructuralSimilarityIndexMeasure,
+from torchmetrics.image import (MultiScaleStructuralSimilarityIndexMeasure,
                                 PeakSignalNoiseRatio)
 
 from tqdm import tqdm
@@ -37,7 +37,7 @@ def fit_pix2pix(
         val_loader: DataLoader|None = None,
         test_loader: DataLoader|None = None,
         resume:bool = False,
-        discriminator_reset_interval: int | None = None,
+        best_val_ssim:float = -1.0,
         ) -> dict:
 
     do_validation = False
@@ -65,10 +65,10 @@ def fit_pix2pix(
                 "ssim": [], "psnr": []}, 
         "best": None}
     
-    best_val_ssim = -1.0
+    best_val_ssim = best_val_ssim
     start_step = 1
 
-    ssim_monitor = StructuralSimilarityIndexMeasure(data_range=1.0).to(device)
+    ssim_monitor = MultiScaleStructuralSimilarityIndexMeasure(data_range=1.0).to(device)
     psnr_monitor = PeakSignalNoiseRatio(data_range=1.0).to(device)
 
     if resume and latest_ckpt_path.exists():
@@ -77,6 +77,10 @@ def fit_pix2pix(
                                                             optimizer_g, optimizer_d)
         if history.get("best"): best_val_ssim = history['best'].get("val_ssim", -1.0)
         start_step = last_step + 1
+
+    discriminator_strong_steps = 0
+    discriminator_reset_threshold = 0.45
+    discriminator_reset_patience = 3
 
     generator.train()
     discriminator.train()
@@ -95,13 +99,7 @@ def fit_pix2pix(
         update_g = (step % g_updates_per_step == 0)
         update_d = (step % d_updates_per_step == 0)
 
-        if (
-            discriminator_reset_interval is not None
-            and discriminator_reset_interval > 0
-            and step > start_step
-            and step % discriminator_reset_interval == 0
-        ):
-            reset_discriminator(discriminator, optimizer_d)
+        
 
         train_history = train_step(batch, generator, discriminator, optimizer_g, optimizer_d, 
                                    loss_fn, device, update_d, update_g)
@@ -161,13 +159,23 @@ def fit_pix2pix(
             if test_loader is not None and is_best:
                 predict(test_loader, generator, device, ssim_monitor, psnr_monitor, TEST_DIR, fname_identifier)
 
+        if (train_history['d_loss'] < discriminator_reset_threshold):
+            discriminator_strong_steps += 1
+        else:
+            discriminator_strong_steps = 0
+
+        if discriminator_strong_steps >= discriminator_reset_patience:
+            reset_discriminator(discriminator, optimizer_d, step)
+            discriminator_strong_steps = 0
+
     return history    
 
 
 
-def reset_discriminator(discriminator: Module, optimizer_d: Optimizer):
+def reset_discriminator(discriminator: Module, optimizer_d: Optimizer, step:int):
     for module in discriminator.modules():
         if hasattr(module, "reset_parameters"):
             module.reset_parameters()
 
     optimizer_d.state.clear()
+    tqdm.write(f"Discriminator reset is happened at step {step}.\n")

@@ -11,7 +11,7 @@ class UNet(nn.Module):
 
         self.initial = nn.Sequential(
             nn.Conv2d(in_channels, 64, kernel_size=3, stride=1, padding=1, padding_mode="zeros", bias=False),
-            nn.InstanceNorm2d(64, affine=True),
+            #nn.InstanceNorm2d(64, affine=True),
             nn.LeakyReLU(negative_slope=0.2)
         )
 
@@ -25,11 +25,11 @@ class UNet(nn.Module):
         self.bottleneck = nn.Sequential(
             nn.Conv2d(512, 512, kernel_size=3, stride=1, padding=1, padding_mode="zeros", bias=False),
             nn.InstanceNorm2d(512, affine=True),
-            nn.ReLU(inplace=True)
+            nn.LeakyReLU(negative_slope=0.2, inplace=True)
         )
 
-        self.decoder_block6 = DecoderBlock(512, 512, 512, num_convs=2, apply_drop=True)
-        self.decoder_block5 = DecoderBlock(512, 512, 512, num_convs=2, apply_drop=True)
+        self.decoder_block6 = DecoderBlock(512, 512, 512, num_convs=2, apply_drop=False)
+        self.decoder_block5 = DecoderBlock(512, 512, 512, num_convs=2, apply_drop=False)
         self.decoder_block4 = DecoderBlock(512, 512, 512, num_convs=2, apply_drop = False)
         self.decoder_block3 = DecoderBlock(512, 512, 256, num_convs=2, apply_drop = False)
         self.decoder_block2 = DecoderBlock(256, 256, 128, num_convs=2, apply_drop = False)
