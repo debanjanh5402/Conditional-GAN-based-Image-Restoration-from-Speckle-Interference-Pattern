@@ -56,22 +56,10 @@ $$
 \phi(x,y)\sim U(-\pi,\pi)
 $$
 
-The complex field is propagated using a Gaussian point-spread function in the Fourier domain:
+The complex field is propagated using a Gaussian impulse function $h(x, y)$ and detected as an intensity:
 
 $$
-H=\mathcal{F}\{PSF\}
-$$
-
-followed by intensity detection:
-
-$$
-S(x,y)=
-\left|
-\mathcal{F}^{-1}
-\left[
-\mathcal{F}\{g\}H
-\right]
-\right|^2
+I(x, y) = |g(x, y) \star h(x, y)|^2
 $$
 
 The resulting speckle measurements are normalized and transformed using a power-law gamma operation.
