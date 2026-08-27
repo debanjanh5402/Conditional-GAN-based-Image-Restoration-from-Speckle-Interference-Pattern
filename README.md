@@ -72,7 +72,7 @@ The resulting speckle measurements are normalized and transformed using a power-
 | Speckle channels     |                    3 |
 | PSF                  |             Gaussian |
 | Gaussian σ           |                  1.0 |
-| Random phase         | Uniform \([-\pi,\pi]\) |
+| Random phase         |   Uniform \([-π,π]\) |
 | Gamma transformation |                 0.39 |
 
 The three independent speckle realizations are provided as the three input channels to the generator.
